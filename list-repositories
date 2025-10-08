@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# Default configuration
+OWNER_TAG="mighty-llamas-squad"
+OUTPUT_FILE="cortex_repos.csv"
+BASE_URL="https://api.getcortexapp.com/api/v1/catalog"
+PAGE_SIZE=250
+QUIET=false
+
+usage() {
+  cat <<EOF
+Usage: $(basename "$0") [-o owner_tag] [-f output_csv] [-u base_url] [-q] [-h]
+
+Fetch unique Git repositories from Cortex for a given owner tag and export as CSV.
+
+Options:
+  -o  Owner tag to filter by (default: ${OWNER_TAG})
+  -f  Output CSV file path (default: ${OUTPUT_FILE})
+  -u  Base API URL (default: ${BASE_URL})
+  -q  Quiet mode (do not print repository names to stdout)
+  -h  Show this help and exit
+
+Auth:
+  The script expects the environment variable CORTEX_API_TOKEN to be set.
+  If it is not set, you will be securely prompted to paste it (input hidden).
+
+Output:
+  CSV columns: "entity name","repo name","repo link"
+EOF
+}
+
+# Parse CLI options with getopts
+while getopts ":o:f:u:qh" opt; do
+  case "$opt" in
+    o) OWNER_TAG="${OPTARG}" ;;
+    f) OUTPUT_FILE="${OPTARG}" ;;
+    u) BASE_URL="${OPTARG}" ;;
+    q) QUIET=true ;;
+    h) usage; exit 0 ;;
+    \?) echo "Error: Invalid option -$OPTARG" >&2; usage; exit 2 ;;
+    :)  echo "Error: Option -$OPTARG requires an argument." >&2; usage; exit 2 ;;
+  esac
+done
+
+# Dependencies check
+need_cmd() { command -v "$1" >/dev/null 2>&1 || { echo "Error: required command '$1' not found in PATH." >&2; exit 1; }; }
+need_cmd curl
+need_cmd jq
+
+# Read token from env or prompt securely
+: "${CORTEX_API_TOKEN:=}"
+if [[ -z "${CORTEX_API_TOKEN}" ]]; then
+  echo -n "Enter Cortex API token: " >&2
+  # shellcheck disable=SC2162
+  read -rs CORTEX_API_TOKEN
+  echo >&2
+fi
+if [[ -z "${CORTEX_API_TOKEN}" ]]; then
+  echo "Error: CORTEX_API_TOKEN is required." >&2
+  exit 1
+fi
+
+# Temporary files and cleanup
+RESP_TMP="$(mktemp -t cortex_resp.XXXXXX.json)"
+ENTITIES_TMP_DIR="$(mktemp -d -t cortex_entities.XXXXXX)"
+COMBINED_TMP="$(mktemp -t cortex_combined.XXXXXX.json)"
+trap 'rm -f "$RESP_TMP" "$COMBINED_TMP"; rm -rf "$ENTITIES_TMP_DIR"' EXIT
+
+# Curl helper with sane defaults
+curl_json() {
+  local url="$1"
+  curl --fail --silent --show-error \
+       --retry 3 --retry-delay 1 --retry-connrefused \
+       -H "Authorization: Bearer ${CORTEX_API_TOKEN}" \
+       -H "Accept: application/json" \
+       "$url"
+}
+
+# Build common query and fetch first page
+QUERY_COMMON="owners=$(printf '%s' "$OWNER_TAG" | jq -sRr @uri)&types=service&includeOwners=true&pageSize=${PAGE_SIZE}"
+FIRST_URL="${BASE_URL}?${QUERY_COMMON}&page=0"
+
+if ! curl_json "$FIRST_URL" > "$RESP_TMP"; then
+  echo "Error: Failed to fetch page 0 from Cortex API." >&2
+  exit 1
+fi
+
+# Determine total pages
+TOTAL_PAGES="$(jq -r '(.totalPages // 1) | tonumber' "$RESP_TMP" 2>/dev/null || echo 1)"
+if ! [[ "$TOTAL_PAGES" =~ ^[0-9]+$ ]]; then
+  echo "Error: Invalid totalPages value from API." >&2
+  exit 1
+fi
+
+jq -c '.entities // []' "$RESP_TMP" > "${ENTITIES_TMP_DIR}/entities_0.json"
+
+# Loop remaining pages
+if (( TOTAL_PAGES > 1 )); then
+  for (( p=1; p< TOTAL_PAGES; p++ )); do
+    URL="${BASE_URL}?${QUERY_COMMON}&page=${p}"
+    if ! curl_json "$URL" > "$RESP_TMP"; then
+      echo "Error: Failed to fetch page ${p} from Cortex API." >&2
+      exit 1
+    fi
+    jq -c '.entities // []' "$RESP_TMP" > "${ENTITIES_TMP_DIR}/entities_${p}.json"
+  done
+fi
+
+# Combine all entities into one array
+jq -s 'add' "${ENTITIES_TMP_DIR}/"entities_*.json > "$COMBINED_TMP"
+
+# Extract and deduplicate unique repos
+jq -r '
+  def norm_link(g):
+    if (g.repositoryUrl // "") != "" then g.repositoryUrl
+    elif ((g.provider // "") == "github") and ((g.repository // "") != "") then "https://github.com/" + (g.repository)
+    else ""
+    end;
+
+  map(select(.git != null and ((.git.repositoryUrl != null) or (.git.repository != null))))
+  | map({
+      entity: (.name // ""),
+      repo:   (.git.repository // ""),
+      link:   norm_link(.git),
+      key:    ((.git.repositoryUrl // .git.repository) // "")
+    })
+  | unique_by(.key)
+  | sort_by(.repo)
+  | (["entity name","repo name","repo link"]),
+    (.[] | [ .entity, .repo, .link ])
+  | @csv
+' "$COMBINED_TMP" > "$OUTPUT_FILE"
+
+# Print repos to stdout (unless quiet)
+if [[ "$QUIET" == false ]]; then
+  echo "Repositories for owner '${OWNER_TAG}':"
+  jq -r '
+    map(select(.git != null and ((.git.repositoryUrl != null) or (.git.repository != null))))
+    | map(((.git.repository) // ""))
+    | unique | sort | .[]
+  ' "$COMBINED_TMP"
+fi
+
+# Confirm write
+LINES_WRITTEN="$(wc -l < "$OUTPUT_FILE" | tr -d '[:space:]')"
+if [[ "$LINES_WRITTEN" -lt 1 ]]; then
+  echo "Warning: No repositories found for owner tag '${OWNER_TAG}'. Wrote an empty file at ${OUTPUT_FILE}." >&2
+else
+  echo "Success: Wrote ${LINES_WRITTEN} line(s) to '${OUTPUT_FILE}'."
+fi
+
