@@ -6,6 +6,8 @@
 - Bash (tested with version 5)
 - `curl`
 - `jq`
+- `shellcheck` (for linting)
+- `bats` (for tests)
 - Network access to the Cortex Catalogue application programming interface endpoint used by your organisation
 
 Ensure these commands are installed and available on your command line interface before running the script.
@@ -61,3 +63,13 @@ The comma separated values file contains the columns `entity name`, `repo name`,
 - If the script reports `Error: required command ... not found`, install the missing command and retry.
 - If the script reports an authentication error, confirm that your token is valid and has Catalogue read permissions.
 - If the output file is empty, confirm that the owner tag exists in Cortex and that its entities have Git repository metadata set.
+
+## Testing
+
+The repository includes automated tests built with [shellcheck](https://www.shellcheck.net/) and [bats](https://bats-core.readthedocs.io/). To run them locally:
+
+```bash
+make test
+```
+
+The `make test` target lints the script with shellcheck and exercises the bats suite using stubbed Cortex responses, so no real Cortex API token is required.
