@@ -1,0 +1,23 @@
+{
+  "total": 4,
+  "page": 1,
+  "totalPages": 2,
+  "entities": [
+    {
+      "name": "two-service",
+      "description": "Two service",
+      "git": {
+        "repository": "example/two-service",
+        "repositoryUrl": "https://github.com/example/two-service"
+      }
+    },
+    {
+      "name": "gamma-service",
+      "description": null,
+      "git": {
+        "provider": "github",
+        "repository": "example/gamma-service"
+      }
+    }
+  ]
+}

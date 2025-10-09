@@ -5,4 +5,8 @@ setup: list-cortex-repositories
 uninstall:
 	sudo rm -f /usr/local/bin/list-cortex-repositories
 
-.PHONY: setup uninstall
+test:
+	shellcheck list-cortex-repositories
+	bats tests
+
+.PHONY: setup uninstall test
