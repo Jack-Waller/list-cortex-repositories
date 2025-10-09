@@ -30,33 +30,33 @@ Output:
 EOF
 }
 
+# Ensure an option receives an accompanying value
+require_option_argument() {
+  local option_name="$1"
+  local option_value="$2"
+
+  if [[ -z "${option_value}" ]]; then
+    echo "Error: Option ${option_name} requires an argument." >&2
+    usage
+    exit 2
+  fi
+}
+
 # Parse CLI options with support for short and long forms
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -o|--owner-tag)
-      if [[ $# -lt 2 ]]; then
-        echo "Error: Option $1 requires an argument." >&2
-        usage
-        exit 2
-      fi
+      require_option_argument "$1" "${2-}"
       OWNER_TAG="$2"
       shift 2
       ;;
     -f|--output-file)
-      if [[ $# -lt 2 ]]; then
-        echo "Error: Option $1 requires an argument." >&2
-        usage
-        exit 2
-      fi
+      require_option_argument "$1" "${2-}"
       OUTPUT_FILE="$2"
       shift 2
       ;;
     -u|--base-url)
-      if [[ $# -lt 2 ]]; then
-        echo "Error: Option $1 requires an argument." >&2
-        usage
-        exit 2
-      fi
+      require_option_argument "$1" "${2-}"
       BASE_URL="$2"
       shift 2
       ;;
