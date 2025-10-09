@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 # Default configuration
-OWNER_TAG="mighty-llamas-squad"
+OWNER_TAG="${CORTEX_OWNER_TAG:-}"
 OUTPUT_FILE="cortex_repos.csv"
 BASE_URL="https://api.getcortexapp.com/api/v1/catalog"
 PAGE_SIZE=250
@@ -10,12 +10,12 @@ QUIET=false
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [-o owner_tag] [-f output_csv] [-u base_url] [-q] [-h]
+Usage: $(basename "$0") -o owner_tag [-f output_csv] [-u base_url] [-q] [-h]
 
 Fetch unique Git repositories from Cortex for a given owner tag and export as CSV.
 
 Options:
-  -o  Owner tag to filter by (default: ${OWNER_TAG})
+  -o  Owner tag to filter by (required unless CORTEX_OWNER_TAG is set)
   -f  Output CSV file path (default: ${OUTPUT_FILE})
   -u  Base API URL (default: ${BASE_URL})
   -q  Quiet mode (do not print repository names to stdout)
@@ -24,6 +24,9 @@ Options:
 Auth:
   The script expects the environment variable CORTEX_API_TOKEN to be set.
   If it is not set, you will be securely prompted to paste it (input hidden).
+
+Owner tag:
+  Provide the owner tag with -o or set the environment variable CORTEX_OWNER_TAG.
 
 Output:
   CSV columns: "repo name","repo link","entity name","entity description"
@@ -42,6 +45,12 @@ while getopts ":o:f:u:qh" opt; do
     :)  echo "Error: Option -$OPTARG requires an argument." >&2; usage; exit 2 ;;
   esac
 done
+
+if [[ -z "${OWNER_TAG}" ]]; then
+  echo "Error: owner tag is required. Set CORTEX_OWNER_TAG or pass -o." >&2
+  usage
+  exit 2
+fi
 
 # Dependencies check
 require_command() { command -v "$1" >/dev/null 2>&1 || { echo "Error: required command '$1' not found in PATH." >&2; exit 1; }; }

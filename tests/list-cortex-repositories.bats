@@ -6,17 +6,29 @@ setup() {
   export PATH
   export CORTEX_API_TOKEN="test-token"
   OUTPUT_FILE="${BATS_TMPDIR}/output.csv"
+  unset CORTEX_OWNER_TAG
 }
 
 teardown() {
   rm -f "${OUTPUT_FILE:-}"
   unset CURL_STUB_FAIL_ON_PAGE
+  unset CORTEX_OWNER_TAG
 }
 
 @test "shows usage help" {
   run "${REPO_ROOT}/list-cortex-repositories" -h
   [ "$status" -eq 0 ]
   [[ "$output" == *"Usage:"* ]]
+}
+
+@test "fails when owner tag is missing" {
+  run "${REPO_ROOT}/list-cortex-repositories" \
+    -u "https://example.test/catalog" \
+    -f "$OUTPUT_FILE" \
+    -q
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Error: owner tag is required."* ]]
 }
 
 @test "exports repositories to csv using fixtures" {
@@ -35,6 +47,18 @@ teardown() {
     echo "CSV output did not match expected fixture" >&2
     return 1
   fi
+}
+
+@test "uses environment owner tag when option is omitted" {
+  export CORTEX_OWNER_TAG="sample-team"
+
+  run "${REPO_ROOT}/list-cortex-repositories" \
+    -u "https://example.test/catalog" \
+    -f "$OUTPUT_FILE" \
+    -q
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Success: Wrote"* ]]
 }
 
 @test "fails when an option argument is missing" {
