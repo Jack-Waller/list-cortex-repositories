@@ -26,7 +26,7 @@ Auth:
   If it is not set, you will be securely prompted to paste it (input hidden).
 
 Output:
-  CSV columns: "entity name","repo name","repo link"
+  CSV columns: "repo name","repo link","entity name","entity description"
 EOF
 }
 
@@ -120,15 +120,16 @@ jq -r '
 
   map(select(.git != null and ((.git.repositoryUrl != null) or (.git.repository != null))))
   | map({
-      entity: (.name // ""),
-      repo:   (.git.repository // ""),
-      link:   norm_link(.git),
-      key:    ((.git.repositoryUrl // .git.repository) // "")
+      repo:         (.git.repository // ""),
+      link:         norm_link(.git),
+      entity:       (.name // ""),
+      description:  (.description // ""),
+      key:          ((.git.repositoryUrl // .git.repository) // "")
     })
   | unique_by(.key)
   | sort_by(.repo)
-  | (["entity name","repo name","repo link"]),
-    (.[] | [ .entity, .repo, .link ])
+  | (["repo name","repo link","entity name","entity description"]),
+    (.[] | [ .repo, .link, .entity, .description ])
   | @csv
 ' "$COMBINED_TMP" > "$OUTPUT_FILE"
 
@@ -149,4 +150,3 @@ if [[ "$LINES_WRITTEN" -lt 1 ]]; then
 else
   echo "Success: Wrote ${LINES_WRITTEN} line(s) to '${OUTPUT_FILE}'."
 fi
-
