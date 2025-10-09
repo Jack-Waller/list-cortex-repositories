@@ -44,9 +44,9 @@ while getopts ":o:f:u:qh" opt; do
 done
 
 # Dependencies check
-need_cmd() { command -v "$1" >/dev/null 2>&1 || { echo "Error: required command '$1' not found in PATH." >&2; exit 1; }; }
-need_cmd curl
-need_cmd jq
+require_command() { command -v "$1" >/dev/null 2>&1 || { echo "Error: required command '$1' not found in PATH." >&2; exit 1; }; }
+require_command curl
+require_command jq
 
 # Read token from env or prompt securely
 : "${CORTEX_API_TOKEN:=}"
@@ -62,13 +62,13 @@ if [[ -z "${CORTEX_API_TOKEN}" ]]; then
 fi
 
 # Temporary files and cleanup
-RESP_TMP="$(mktemp -t cortex_resp.XXXXXX.json)"
-ENTITIES_TMP_DIR="$(mktemp -d -t cortex_entities.XXXXXX)"
-COMBINED_TMP="$(mktemp -t cortex_combined.XXXXXX.json)"
-trap 'rm -f "$RESP_TMP" "$COMBINED_TMP"; rm -rf "$ENTITIES_TMP_DIR"' EXIT
+RESPONSE_TEMPORARY_FILE="$(mktemp -t cortex_resp.XXXXXX.json)"
+ENTITIES_TEMPORARY_DIRECTORY="$(mktemp -d -t cortex_entities.XXXXXX)"
+COMBINED_TEMPORARY_FILE="$(mktemp -t cortex_combined.XXXXXX.json)"
+trap 'rm -f "$RESPONSE_TEMPORARY_FILE" "$COMBINED_TEMPORARY_FILE"; rm -rf "$ENTITIES_TEMPORARY_DIRECTORY"' EXIT
 
 # Curl helper with sane defaults
-curl_json() {
+fetch_json_from_api() {
   local url="$1"
   curl --fail --silent --show-error \
        --retry 3 --retry-delay 1 --retry-connrefused \
@@ -78,41 +78,41 @@ curl_json() {
 }
 
 # Build common query and fetch first page
-QUERY_COMMON="owners=$(printf '%s' "$OWNER_TAG" | jq -sRr @uri)&types=service&includeOwners=true&pageSize=${PAGE_SIZE}"
-FIRST_URL="${BASE_URL}?${QUERY_COMMON}&page=0"
+COMMON_QUERY_PARAMETERS="owners=$(printf '%s' "$OWNER_TAG" | jq -sRr @uri)&types=service&includeOwners=true&pageSize=${PAGE_SIZE}"
+FIRST_PAGE_URL="${BASE_URL}?${COMMON_QUERY_PARAMETERS}&page=0"
 
-if ! curl_json "$FIRST_URL" > "$RESP_TMP"; then
+if ! fetch_json_from_api "$FIRST_PAGE_URL" > "$RESPONSE_TEMPORARY_FILE"; then
   echo "Error: Failed to fetch page 0 from Cortex API." >&2
   exit 1
 fi
 
 # Determine total pages
-TOTAL_PAGES="$(jq -r '(.totalPages // 1) | tonumber' "$RESP_TMP" 2>/dev/null || echo 1)"
-if ! [[ "$TOTAL_PAGES" =~ ^[0-9]+$ ]]; then
+TOTAL_PAGE_COUNT="$(jq -r '(.totalPages // 1) | tonumber' "$RESPONSE_TEMPORARY_FILE" 2>/dev/null || echo 1)"
+if ! [[ "$TOTAL_PAGE_COUNT" =~ ^[0-9]+$ ]]; then
   echo "Error: Invalid totalPages value from API." >&2
   exit 1
 fi
 
-jq -c '.entities // []' "$RESP_TMP" > "${ENTITIES_TMP_DIR}/entities_0.json"
+jq -c '.entities // []' "$RESPONSE_TEMPORARY_FILE" > "${ENTITIES_TEMPORARY_DIRECTORY}/entities_0.json"
 
 # Loop remaining pages
-if (( TOTAL_PAGES > 1 )); then
-  for (( p=1; p< TOTAL_PAGES; p++ )); do
-    URL="${BASE_URL}?${QUERY_COMMON}&page=${p}"
-    if ! curl_json "$URL" > "$RESP_TMP"; then
-      echo "Error: Failed to fetch page ${p} from Cortex API." >&2
+if (( TOTAL_PAGE_COUNT > 1 )); then
+  for (( PAGE_NUMBER=1; PAGE_NUMBER< TOTAL_PAGE_COUNT; PAGE_NUMBER++ )); do
+    PAGE_URL="${BASE_URL}?${COMMON_QUERY_PARAMETERS}&page=${PAGE_NUMBER}"
+    if ! fetch_json_from_api "$PAGE_URL" > "$RESPONSE_TEMPORARY_FILE"; then
+      echo "Error: Failed to fetch page ${PAGE_NUMBER} from Cortex API." >&2
       exit 1
     fi
-    jq -c '.entities // []' "$RESP_TMP" > "${ENTITIES_TMP_DIR}/entities_${p}.json"
+    jq -c '.entities // []' "$RESPONSE_TEMPORARY_FILE" > "${ENTITIES_TEMPORARY_DIRECTORY}/entities_${PAGE_NUMBER}.json"
   done
 fi
 
 # Combine all entities into one array
-jq -s 'add' "${ENTITIES_TMP_DIR}/"entities_*.json > "$COMBINED_TMP"
+jq -s 'add' "${ENTITIES_TEMPORARY_DIRECTORY}/"entities_*.json > "$COMBINED_TEMPORARY_FILE"
 
 # Extract and deduplicate unique repos
 jq -r '
-  def norm_link(g):
+  def normalise_link(g):
     if (g.repositoryUrl // "") != "" then g.repositoryUrl
     elif ((g.provider // "") == "github") and ((g.repository // "") != "") then "https://github.com/" + (g.repository)
     else ""
@@ -121,7 +121,7 @@ jq -r '
   map(select(.git != null and ((.git.repositoryUrl != null) or (.git.repository != null))))
   | map({
       repo:         (.git.repository // ""),
-      link:         norm_link(.git),
+      link:         normalise_link(.git),
       entity:       (.name // ""),
       description:  (.description // ""),
       key:          ((.git.repositoryUrl // .git.repository) // "")
@@ -131,7 +131,7 @@ jq -r '
   | (["repo name","repo link","entity name","entity description"]),
     (.[] | [ .repo, .link, .entity, .description ])
   | @csv
-' "$COMBINED_TMP" > "$OUTPUT_FILE"
+' "$COMBINED_TEMPORARY_FILE" > "$OUTPUT_FILE"
 
 # Print repos to stdout (unless quiet)
 if [[ "$QUIET" == false ]]; then
@@ -140,13 +140,13 @@ if [[ "$QUIET" == false ]]; then
     map(select(.git != null and ((.git.repositoryUrl != null) or (.git.repository != null))))
     | map(((.git.repository) // ""))
     | unique | sort | .[]
-  ' "$COMBINED_TMP"
+  ' "$COMBINED_TEMPORARY_FILE"
 fi
 
 # Confirm write
-LINES_WRITTEN="$(wc -l < "$OUTPUT_FILE" | tr -d '[:space:]')"
-if [[ "$LINES_WRITTEN" -lt 1 ]]; then
+WRITTEN_LINE_COUNT="$(wc -l < "$OUTPUT_FILE" | tr -d '[:space:]')"
+if [[ "$WRITTEN_LINE_COUNT" -lt 1 ]]; then
   echo "Warning: No repositories found for owner tag '${OWNER_TAG}'. Wrote an empty file at ${OUTPUT_FILE}." >&2
 else
-  echo "Success: Wrote ${LINES_WRITTEN} line(s) to '${OUTPUT_FILE}'."
+  echo "Success: Wrote ${WRITTEN_LINE_COUNT} line(s) to '${OUTPUT_FILE}'."
 fi
