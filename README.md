@@ -31,10 +31,16 @@ make uninstall
 ```
 
 ## Usage
-Run the script from any directory once it is installed:
+Run the script from any directory once it is installed. Supply the owner tag with the `-o` option:
 
 ```bash
-list-cortex-repositories
+list-cortex-repositories -o example-owner-tag
+```
+
+You can also set the `CORTEX_OWNER_TAG` environment variable and call the script without the `-o` option:
+
+```bash
+CORTEX_OWNER_TAG=example-owner-tag list-cortex-repositories
 ```
 
 If you prefer not to install it, run the script directly from the repository root:
@@ -43,14 +49,13 @@ If you prefer not to install it, run the script directly from the repository roo
 ./list-cortex-repositories
 ```
 
-By default the script:
-- filters services by the owner tag `mighty-llamas-squad`
+With the required owner tag in place, the script:
 - queries `https://api.getcortexapp.com/api/v1/catalog`
 - writes the results to `cortex_repos.csv` in the current directory
 - prints the repository names to standard output
 
 Optional flags adjust the behaviour:
-- `-o <owner-tag>` changes the owner tag used for filtering
+- `-o <owner-tag>` sets or overrides the owner tag used for filtering (required unless `CORTEX_OWNER_TAG` is set)
 - `-f <file>` changes the output file path
 - `-u <base-url>` changes the Cortex base uniform resource locator
 - `-q` suppresses the repository list on standard output while still writing the file
