@@ -10,16 +10,16 @@ QUIET=false
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [-o owner_tag] [-f output_csv] [-u base_url] [-q] [-h]
+Usage: $(basename "$0") [--owner-tag <value>] [--output-file <path>] [--base-url <url>] [--quiet] [--help]
 
 Fetch unique Git repositories from Cortex for a given owner tag and export as CSV.
 
 Options:
-  -o  Owner tag to filter by (default: ${OWNER_TAG})
-  -f  Output CSV file path (default: ${OUTPUT_FILE})
-  -u  Base API URL (default: ${BASE_URL})
-  -q  Quiet mode (do not print repository names to stdout)
-  -h  Show this help and exit
+  -o, --owner-tag      Owner tag to filter by (default: ${OWNER_TAG})
+  -f, --output-file    Output CSV file path (default: ${OUTPUT_FILE})
+  -u, --base-url       Base API URL (default: ${BASE_URL})
+  -q, --quiet          Quiet mode (do not print repository names to stdout)
+  -h, --help           Show this help and exit
 
 Auth:
   The script expects the environment variable CORTEX_API_TOKEN to be set.
@@ -30,16 +30,58 @@ Output:
 EOF
 }
 
-# Parse CLI options with getopts
-while getopts ":o:f:u:qh" opt; do
-  case "$opt" in
-    o) OWNER_TAG="${OPTARG}" ;;
-    f) OUTPUT_FILE="${OPTARG}" ;;
-    u) BASE_URL="${OPTARG}" ;;
-    q) QUIET=true ;;
-    h) usage; exit 0 ;;
-    \?) echo "Error: Invalid option -$OPTARG" >&2; usage; exit 2 ;;
-    :)  echo "Error: Option -$OPTARG requires an argument." >&2; usage; exit 2 ;;
+# Parse CLI options with support for short and long forms
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -o|--owner-tag)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: Option $1 requires an argument." >&2
+        usage
+        exit 2
+      fi
+      OWNER_TAG="$2"
+      shift 2
+      ;;
+    -f|--output-file)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: Option $1 requires an argument." >&2
+        usage
+        exit 2
+      fi
+      OUTPUT_FILE="$2"
+      shift 2
+      ;;
+    -u|--base-url)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: Option $1 requires an argument." >&2
+        usage
+        exit 2
+      fi
+      BASE_URL="$2"
+      shift 2
+      ;;
+    -q|--quiet)
+      QUIET=true
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -* )
+      echo "Error: Invalid option $1" >&2
+      usage
+      exit 2
+      ;;
+    * )
+      echo "Error: Unexpected argument $1" >&2
+      usage
+      exit 2
+      ;;
   esac
 done
 
