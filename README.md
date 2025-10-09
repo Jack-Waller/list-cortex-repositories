@@ -1,5 +1,7 @@
 # list-cortex-repositories
 
+[![CI](https://github.com/Jack-Waller/list-cortex-repositories/actions/workflows/ci.yml/badge.svg)](https://github.com/Jack-Waller/list-cortex-repositories/actions/workflows/ci.yml)
+
 `list-cortex-repositories` is a Bash script that queries the Cortex Catalogue and lists every unique Git repository owned by a chosen team. The results are written to a comma separated values file so the data can be shared or analysed easily.
 
 ## Requirements
