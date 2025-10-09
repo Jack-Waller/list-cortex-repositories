@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FIXTURE_DIR="${SCRIPT_DIR}/../fixtures"
+
+fail_on_page="${CURL_STUB_FAIL_ON_PAGE:-}"
+url=""
+
+args=("$@")
+while (($#)); do
+  case "$1" in
+    http://*|https://*)
+      url="$1"
+      shift
+      ;;
+    -H)
+      shift 2
+      ;;
+    --retry|--retry-delay)
+      shift 2
+      ;;
+    --retry-connrefused|--fail|--silent|--show-error)
+      shift
+      ;;
+    -*)
+      shift
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "$url" ]]; then
+  echo "curl stub: missing URL" >&2
+  exit 1
+fi
+
+page="$(printf '%s' "$url" | sed -n 's/.*[?&]page=\([0-9][0-9]*\).*/\1/p')"
+if [[ -z "$page" ]]; then
+  page=0
+fi
+
+if [[ -n "$fail_on_page" && "$page" == "$fail_on_page" ]]; then
+  echo "curl stub: simulated failure on page $page" >&2
+  exit 22
+fi
+
+fixture="${FIXTURE_DIR}/page${page}.json"
+if [[ ! -f "$fixture" ]]; then
+  echo "curl stub: fixture $fixture not found" >&2
+  exit 1
+fi
+
+cat "$fixture"
