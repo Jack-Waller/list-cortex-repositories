@@ -78,3 +78,27 @@ teardown() {
   [ "$status" -ne 0 ]
   [[ "$output" == *"Error: Failed to fetch page 1 from Cortex API."* ]]
 }
+
+@test "filters repositories by service class using -c option" {
+  run "${REPO_ROOT}/list-cortex-repositories" \
+    -o sample-team \
+    -c "first-class" \
+    -u "https://example.test/catalog" \
+    -f "$OUTPUT_FILE" \
+    -q
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Success: Wrote"* ]]
+}
+
+@test "accepts multiple service classes with -c option" {
+  run "${REPO_ROOT}/list-cortex-repositories" \
+    -o sample-team \
+    -c "first-class,business-class" \
+    -u "https://example.test/catalog" \
+    -f "$OUTPUT_FILE" \
+    -q
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Success: Wrote"* ]]
+}
