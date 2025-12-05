@@ -7,15 +7,17 @@ OUTPUT_FILE="cortex_repos.csv"
 BASE_URL="https://api.getcortexapp.com/api/v1/catalog"
 PAGE_SIZE=250
 QUIET=false
+SERVICE_CLASSES=""
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") -o owner_tag [-f output_csv] [-u base_url] [-q] [-h]
+Usage: $(basename "$0") -o owner_tag [-c service_classes] [-f output_csv] [-u base_url] [-q] [-h]
 
 Fetch unique Git repositories from Cortex for a given owner tag and export as CSV.
 
 Options:
   -o  Owner tag to filter by (required unless CORTEX_OWNER_TAG is set)
+  -c  Service classes to filter by, comma-separated (optional; if not provided, all repos are returned)
   -f  Output CSV file path (default: ${OUTPUT_FILE})
   -u  Base API URL (default: ${BASE_URL})
   -q  Quiet mode (do not print repository names to stdout)
@@ -34,9 +36,10 @@ EOF
 }
 
 # Parse CLI options with getopts
-while getopts ":o:f:u:qh" opt; do
+while getopts ":o:c:f:u:qh" opt; do
   case "$opt" in
     o) OWNER_TAG="${OPTARG}" ;;
+    c) SERVICE_CLASSES="${OPTARG}" ;;
     f) OUTPUT_FILE="${OPTARG}" ;;
     u) BASE_URL="${OPTARG}" ;;
     q) QUIET=true ;;
@@ -87,7 +90,7 @@ fetch_json_from_api() {
 }
 
 # Build common query and fetch first page
-COMMON_QUERY_PARAMETERS="owners=$(printf '%s' "$OWNER_TAG" | jq -sRr @uri)&types=service&includeOwners=true&pageSize=${PAGE_SIZE}"
+COMMON_QUERY_PARAMETERS="owners=$(printf '%s' "$OWNER_TAG" | jq -sRr @uri)&types=service&includeOwners=true&includeMetadata=true&pageSize=${PAGE_SIZE}"
 FIRST_PAGE_URL="${BASE_URL}?${COMMON_QUERY_PARAMETERS}&page=0"
 
 if ! fetch_json_from_api "$FIRST_PAGE_URL" > "$RESPONSE_TEMPORARY_FILE"; then
@@ -120,14 +123,28 @@ fi
 jq -s 'add' "${ENTITIES_TEMPORARY_DIRECTORY}/"entities_*.json > "$COMBINED_TEMPORARY_FILE"
 
 # Extract and deduplicate unique repos
-jq -r '
+jq --arg service_classes "$SERVICE_CLASSES" -r '
   def normalise_link(g):
     if (g.repositoryUrl // "") != "" then g.repositoryUrl
     elif ((g.provider // "") == "github") and ((g.repository // "") != "") then "https://github.com/" + (g.repository)
     else ""
     end;
 
-  map(select(.git != null and ((.git.repositoryUrl != null) or (.git.repository != null))))
+  def get_metadata(key):
+    (.metadata // [] | map(select(.key == key) | .value) | .[0] // "undefined");
+
+  def is_valid_service_class:
+    if ($service_classes == "") then true
+    else
+      get_metadata("service-class") as $class |
+      ($service_classes | split(",") | any(. == $class)) and (.type == "service")
+    end;
+
+  map(select(
+    .git != null and 
+    ((.git.repositoryUrl != null) or (.git.repository != null)) and
+    is_valid_service_class
+  ))
   | map({
       repo:         (.git.repository // ""),
       link:         normalise_link(.git),
@@ -145,11 +162,25 @@ jq -r '
 # Print repos to stdout (unless quiet)
 if [[ "$QUIET" == false ]]; then
   echo "Repositories for owner '${OWNER_TAG}':"
-  jq -r '
-    map(select(.git != null and ((.git.repositoryUrl != null) or (.git.repository != null))))
+  jq --arg service_classes "$SERVICE_CLASSES" -r '
+    def get_metadata(key):
+      (.metadata // [] | map(select(.key == key) | .value) | .[0] // "undefined");
+
+    def is_valid_service_class:
+      if ($service_classes == "") then true
+      else
+        get_metadata("service-class") as $class |
+        ($service_classes | split(",") | any(. == $class)) and (.type == "service")
+      end;
+    
+    map(select(
+      .git != null and 
+      ((.git.repositoryUrl != null) or (.git.repository != null)) and
+      is_valid_service_class
+    ))
     | map(((.git.repository) // ""))
     | unique | sort | .[]
-  ' "$COMBINED_TEMPORARY_FILE"
+' "$COMBINED_TEMPORARY_FILE"
 fi
 
 # Confirm write
