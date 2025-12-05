@@ -87,7 +87,7 @@ fetch_json_from_api() {
 }
 
 # Build common query and fetch first page
-COMMON_QUERY_PARAMETERS="owners=$(printf '%s' "$OWNER_TAG" | jq -sRr @uri)&types=service&includeOwners=true&pageSize=${PAGE_SIZE}"
+COMMON_QUERY_PARAMETERS="owners=$(printf '%s' "$OWNER_TAG" | jq -sRr @uri)&types=service&includeOwners=true&includeMetadata=true&pageSize=${PAGE_SIZE}"
 FIRST_PAGE_URL="${BASE_URL}?${COMMON_QUERY_PARAMETERS}&page=0"
 
 if ! fetch_json_from_api "$FIRST_PAGE_URL" > "$RESPONSE_TEMPORARY_FILE"; then
@@ -127,7 +127,22 @@ jq -r '
     else ""
     end;
 
-  map(select(.git != null and ((.git.repositoryUrl != null) or (.git.repository != null))))
+  def get_metadata(key):
+    (.metadata // [] | map(select(.key == key) | .value) | .[0] // "undefined");
+
+  def is_valid_service_class:
+    get_metadata("service-class") as $class |
+    ($class == "first-class" or $class == "business-class");
+
+  def is_operational:
+    (.type == "service");
+
+  map(select(
+    .git != null and 
+    ((.git.repositoryUrl != null) or (.git.repository != null)) and
+    is_valid_service_class and
+    is_operational
+  ))
   | map({
       repo:         (.git.repository // ""),
       link:         normalise_link(.git),
@@ -146,10 +161,25 @@ jq -r '
 if [[ "$QUIET" == false ]]; then
   echo "Repositories for owner '${OWNER_TAG}':"
   jq -r '
-    map(select(.git != null and ((.git.repositoryUrl != null) or (.git.repository != null))))
+    def get_metadata(key):
+      (.metadata // [] | map(select(.key == key) | .value) | .[0] // "undefined");
+
+    def is_valid_service_class:
+      get_metadata("service-class") as $class |
+      ($class == "first-class" or $class == "business-class");
+
+    def is_operational:
+      (.type == "service");
+    
+    map(select(
+      .git != null and 
+      ((.git.repositoryUrl != null) or (.git.repository != null)) and
+      is_valid_service_class and
+     is_operational
+    ))
     | map(((.git.repository) // ""))
     | unique | sort | .[]
-  ' "$COMBINED_TEMPORARY_FILE"
+' "$COMBINED_TEMPORARY_FILE"
 fi
 
 # Confirm write
