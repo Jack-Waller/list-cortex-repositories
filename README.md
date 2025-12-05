@@ -56,6 +56,7 @@ With the required owner tag in place, the script:
 
 Optional flags adjust the behaviour:
 - `-o <owner-tag>` sets or overrides the owner tag used for filtering (required unless `CORTEX_OWNER_TAG` is set)
+- `-c <service-classes>` filters by service classes (comma-separated list); if not provided, all repositories are returned
 - `-f <file>` changes the output file path
 - `-u <base-url>` changes the Cortex base uniform resource locator
 - `-q` suppresses the repository list on standard output while still writing the file
