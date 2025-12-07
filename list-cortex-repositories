@@ -8,16 +8,18 @@ BASE_URL="https://api.getcortexapp.com/api/v1/catalog"
 PAGE_SIZE=250
 QUIET=false
 SERVICE_CLASSES=""
+COMPONENT_TYPE=""
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") -o owner_tag [-c service_classes] [-f output_csv] [-u base_url] [-q] [-h]
+Usage: $(basename "$0") -o owner_tag [-c service_classes] [-t component_type] [-f output_csv] [-u base_url] [-q] [-h]
 
 Fetch unique Git repositories from Cortex for a given owner tag and export as CSV.
 
 Options:
   -o  Owner tag to filter by (required unless CORTEX_OWNER_TAG is set)
   -c  Service classes to filter by, comma-separated (optional; if not provided, all repos are returned)
+  -t  Component types to filter by, comma-separated; matches when any value is present in the entity groups array
   -f  Output CSV file path (default: ${OUTPUT_FILE})
   -u  Base API URL (default: ${BASE_URL})
   -q  Quiet mode (do not print repository names to stdout)
@@ -31,15 +33,16 @@ Owner tag:
   Provide the owner tag with -o or set the environment variable CORTEX_OWNER_TAG.
 
 Output:
-  CSV columns: "repo name","repo link","entity name","entity description"
+  CSV columns: "repo name","repo link","entity name","entity description","component type","service class"
 EOF
 }
 
 # Parse CLI options with getopts
-while getopts ":o:c:f:u:qh" opt; do
+while getopts ":o:c:t:f:u:qh" opt; do
   case "$opt" in
     o) OWNER_TAG="${OPTARG}" ;;
     c) SERVICE_CLASSES="${OPTARG}" ;;
+    t) COMPONENT_TYPE="${OPTARG}" ;;
     f) OUTPUT_FILE="${OPTARG}" ;;
     u) BASE_URL="${OPTARG}" ;;
     q) QUIET=true ;;
@@ -123,7 +126,7 @@ fi
 jq -s 'add' "${ENTITIES_TEMPORARY_DIRECTORY}/"entities_*.json > "$COMBINED_TEMPORARY_FILE"
 
 # Extract and deduplicate unique repos
-jq --arg service_classes "$SERVICE_CLASSES" -r '
+jq --arg service_classes "$SERVICE_CLASSES" --arg component_type "$COMPONENT_TYPE" -r '
   def normalise_link(g):
     if (g.repositoryUrl // "") != "" then g.repositoryUrl
     elif ((g.provider // "") == "github") and ((g.repository // "") != "") then "https://github.com/" + (g.repository)
@@ -131,7 +134,7 @@ jq --arg service_classes "$SERVICE_CLASSES" -r '
     end;
 
   def get_metadata(key):
-    (.metadata // [] | map(select(.key == key) | .value) | .[0] // "undefined");
+    (.metadata // [] | map(select(.key == key) | .value) | .[0] // "");
 
   def is_valid_service_class:
     if ($service_classes == "") then true
@@ -140,31 +143,41 @@ jq --arg service_classes "$SERVICE_CLASSES" -r '
       ($service_classes | split(",") | any(. == $class)) and (.type == "service")
     end;
 
+  def is_valid_component_type:
+    if ($component_type == "") then true
+    else
+      ($component_type | split(",") | map(.)) as $types |
+      (.groups // [] | any(. as $g | $types | any(. == $g)))
+    end;
+
   map(select(
     .git != null and 
     ((.git.repositoryUrl != null) or (.git.repository != null)) and
-    is_valid_service_class
+    is_valid_service_class and
+    is_valid_component_type
   ))
   | map({
       repo:         (.git.repository // ""),
       link:         normalise_link(.git),
       entity:       (.name // ""),
       description:  (.description // ""),
+      component:    ((.groups // []) | join(";")),
+      serviceClass: get_metadata("service-class"),
       key:          ((.git.repositoryUrl // .git.repository) // "")
     })
   | unique_by(.key)
   | sort_by(.repo)
-  | (["repo name","repo link","entity name","entity description"]),
-    (.[] | [ .repo, .link, .entity, .description ])
+  | (["repo name","repo link","entity name","entity description","component type","service class"]),
+    (.[] | [ .repo, .link, .entity, .description, .component, .serviceClass ])
   | @csv
 ' "$COMBINED_TEMPORARY_FILE" > "$OUTPUT_FILE"
 
 # Print repos to stdout (unless quiet)
 if [[ "$QUIET" == false ]]; then
   echo "Repositories for owner '${OWNER_TAG}':"
-  jq --arg service_classes "$SERVICE_CLASSES" -r '
+  jq --arg service_classes "$SERVICE_CLASSES" --arg component_type "$COMPONENT_TYPE" -r '
     def get_metadata(key):
-      (.metadata // [] | map(select(.key == key) | .value) | .[0] // "undefined");
+      (.metadata // [] | map(select(.key == key) | .value) | .[0] // "");
 
     def is_valid_service_class:
       if ($service_classes == "") then true
@@ -172,11 +185,19 @@ if [[ "$QUIET" == false ]]; then
         get_metadata("service-class") as $class |
         ($service_classes | split(",") | any(. == $class)) and (.type == "service")
       end;
-    
+
+    def is_valid_component_type:
+      if ($component_type == "") then true
+      else
+        ($component_type | split(",") | map(.)) as $types |
+        (.groups // [] | any(. as $g | $types | any(. == $g)))
+      end;
+
     map(select(
       .git != null and 
       ((.git.repositoryUrl != null) or (.git.repository != null)) and
-      is_valid_service_class
+      is_valid_service_class and
+      is_valid_component_type
     ))
     | map(((.git.repository) // ""))
     | unique | sort | .[]

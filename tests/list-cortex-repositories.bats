@@ -91,6 +91,44 @@ teardown() {
   [[ "$output" == *"Success: Wrote"* ]]
 }
 
+@test "filters repositories by component type using -t option" {
+  run "${REPO_ROOT}/list-cortex-repositories" \
+    -o sample-team \
+    -t "tooling" \
+    -u "https://example.test/catalog" \
+    -f "$OUTPUT_FILE" \
+    -q
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Success: Wrote"* ]]
+
+  expected="${REPO_ROOT}/tests/fixtures/expected_tooling.csv"
+  if ! cmp -s "$expected" "$OUTPUT_FILE"; then
+    diff -u "$expected" "$OUTPUT_FILE" >&2 || true
+    echo "CSV output did not match expected fixture for component type filter" >&2
+    return 1
+  fi
+}
+
+@test "accepts multiple component types with -t option" {
+  run "${REPO_ROOT}/list-cortex-repositories" \
+    -o sample-team \
+    -t "platform,product" \
+    -u "https://example.test/catalog" \
+    -f "$OUTPUT_FILE" \
+    -q
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Success: Wrote"* ]]
+
+  expected="${REPO_ROOT}/tests/fixtures/expected_platform_product.csv"
+  if ! cmp -s "$expected" "$OUTPUT_FILE"; then
+    diff -u "$expected" "$OUTPUT_FILE" >&2 || true
+    echo "CSV output did not match expected fixture for multiple component types" >&2
+    return 1
+  fi
+}
+
 @test "accepts multiple service classes with -c option" {
   run "${REPO_ROOT}/list-cortex-repositories" \
     -o sample-team \

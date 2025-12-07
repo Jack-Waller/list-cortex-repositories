@@ -57,6 +57,7 @@ With the required owner tag in place, the script:
 Optional flags adjust the behaviour:
 - `-o <owner-tag>` sets or overrides the owner tag used for filtering (required unless `CORTEX_OWNER_TAG` is set)
 - `-c <service-classes>` filters by service classes (comma-separated list); if not provided, all repositories are returned
+- `-t <component-types>` filters by component types (comma-separated list) when any value is present in the entity `groups` array
 - `-f <file>` changes the output file path
 - `-u <base-url>` changes the Cortex base uniform resource locator
 - `-q` suppresses the repository list on standard output while still writing the file
@@ -65,7 +66,18 @@ Optional flags adjust the behaviour:
 To gather data for several teams, run the script once per owner tag and write each result to a different file.
 
 ## Output
-The comma separated values file contains the columns `entity name`, `repo name`, and `repo link`. Each row represents a unique Git repository discovered in the Cortex Catalogue for the supplied owner tag. The final line printed by the script confirms how many rows were written so you can quickly confirm the call succeeded.
+The comma separated values file contains one row per unique Git repository discovered in the Cortex Catalogue for the supplied owner tag. Columns are:
+
+| Column             | Example value                                  | Description                                                   |
+|--------------------|------------------------------------------------|---------------------------------------------------------------|
+| repo name          | `example-org/example-service`                  | Git repository identifier                                     |
+| repo link          | `https://github.com/example-org/example-service`| Normalised repository link                                    |
+| entity name        | `example-service`                              | Cortex entity name                                            |
+| entity description | `Service that handles bookings`                | Cortex entity description                                     |
+| component type     | `tooling;platform`                             | Semicolon-separated list from the entity `groups` array       |
+| service class      | `business-class`                               | Value of the `service-class` metadata key, if present         |
+
+The final line printed by the script confirms how many rows were written so you can quickly confirm the call succeeded.
 
 ## Troubleshooting
 - If the script reports `Error: required command ... not found`, install the missing command and retry.

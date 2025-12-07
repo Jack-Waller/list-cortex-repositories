@@ -6,18 +6,38 @@
     {
       "name": "one-service",
       "description": "One service",
+      "type": "service",
       "git": {
         "repository": "example/one-service",
         "repositoryUrl": "https://github.com/example/one-service"
-      }
+      },
+      "groups": [
+        "tooling"
+      ],
+      "metadata": [
+        {
+          "key": "service-class",
+          "value": "first-class"
+        }
+      ]
     },
     {
       "name": "two-service",
       "description": "Two service",
+      "type": "service",
       "git": {
         "repository": "example/two-service",
         "repositoryUrl": "https://github.com/example/two-service"
-      }
+      },
+      "groups": [
+        "product"
+      ],
+      "metadata": [
+        {
+          "key": "service-class",
+          "value": "economy"
+        }
+      ]
     }
   ]
 }
