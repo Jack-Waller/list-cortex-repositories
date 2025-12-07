@@ -6,18 +6,39 @@
     {
       "name": "two-service",
       "description": "Two service",
+      "type": "service",
       "git": {
         "repository": "example/two-service",
         "repositoryUrl": "https://github.com/example/two-service"
-      }
+      },
+      "groups": [
+        "product"
+      ],
+      "metadata": [
+        {
+          "key": "service-class",
+          "value": "economy"
+        }
+      ]
     },
     {
       "name": "gamma-service",
       "description": null,
+      "type": "service",
       "git": {
         "provider": "github",
         "repository": "example/gamma-service"
-      }
+      },
+      "groups": [
+        "tooling",
+        "platform"
+      ],
+      "metadata": [
+        {
+          "key": "service-class",
+          "value": "business-class"
+        }
+      ]
     }
   ]
 }

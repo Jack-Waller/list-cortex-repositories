@@ -1,4 +1,3 @@
 "repo name","repo link","entity name","entity description","component type","service class"
 "example/gamma-service","https://github.com/example/gamma-service","gamma-service","","tooling;platform","business-class"
-"example/one-service","https://github.com/example/one-service","one-service","One service","tooling","first-class"
 "example/two-service","https://github.com/example/two-service","two-service","Two service","product","economy"
